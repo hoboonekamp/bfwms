@@ -68,6 +68,5 @@ node_modules/
 # dataconnect generated files
 .dataconnect
 bf-werkzeug-tracker-firebase-adminsdk-*.json
-bf-werkzeug-tracker-firebase-adminsdk-*.json
 public_backup_*
 *.save
