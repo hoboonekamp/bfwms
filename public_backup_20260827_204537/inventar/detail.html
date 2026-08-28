@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Werkzeug Detail</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="../firebase-config.js"></script>
+<style>
+  body { font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 10px; }
+  a.back { display:inline-block; margin-bottom:10px; text-decoration:none; color:#2563eb; }
+  #qrImg { max-width: 250px; display:block; margin: 14px auto; }
+  button { padding: 12px 20px; font-size: 16px; margin-top: 10px; width: 100%; }
+  .info { font-size: 15px; margin: 6px 0; }
+  @media print {
+    a.back, button, #status { display: none; }
+  }
+</style>
+</head>
+<body>
+<a class="back" href="inventar-liste.html">← Zurück</a>
+<h2 id="titel">Lade...</h2>
+<div id="status"></div>
+<div id="standort" class="info"></div>
+<img id="qrImg" style="display:none;">
+<a id="downloadBtn" style="display:none;" download>
+  <button>⬇ QR herunterladen</button>
+</a>
+
+<script>
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const params = new URLSearchParams(window.location.search);
+const werkzeugId = params.get('id');
+
+async function lade() {
+  if (!werkzeugId) { document.getElementById('status').textContent = 'Keine ID angegeben'; return; }
+
+  const doc = await db.collection('werkzeuge').doc(werkzeugId).get();
+  if (!doc.exists) { document.getElementById('status').textContent = 'Werkzeug nicht gefunden'; return; }
+  const w = doc.data();
+
+  document.getElementById('titel').textContent = `${w.name} (${w.werkzeugId})`;
+
+  // Aktuellen Standort ermitteln
+  const aufSnap = await db.collection('auftraege').where('status', '==', 'offen').get();
+  let standortText = '📦 Im Lager (keinem offenen Auftrag zugeordnet)';
+  aufSnap.forEach(aDoc => {
+    const auftrag = aDoc.data();
+    const eintrag = (auftrag.werkzeuge || []).find(x => x.werkzeugId === werkzeugId);
+    if (eintrag) {
+      const mitarbeiter = (auftrag.mitarbeiter || []).find(m => m.mitarbeiterId === eintrag.mitarbeiterId);
+      const name = mitarbeiter ? mitarbeiter.name : eintrag.mitarbeiterId;
+      standortText = `👷 ${name} — 📋 ${auftrag.auftragId} (${auftrag.auftraggeber}, ${auftrag.ort})`;
+    }
+  });
+  document.getElementById('standort').textContent = standortText;
+
+  // QR-Code anzeigen, falls vorhanden
+  if (w.qrFile) {
+    const img = document.getElementById('qrImg');
+    img.src = `/qr-codes/${w.qrFile}`;
+    img.style.display = 'block';
+    const downloadBtn = document.getElementById('downloadBtn');
+downloadBtn.href = `/qr-codes/${w.qrFile}`;
+downloadBtn.download = w.qrFile;
+downloadBtn.style.display = 'block';
+  } else {
+    document.getElementById('status').textContent = '⚠ Kein QR-Code gespeichert für dieses Objekt';
+  }
+}
+lade();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,158 @@
+const express = require('express');
+const QRCode = require('qrcode');
+const path = require('path');
+const fs = require('fs');
+const admin = require('firebase-admin');
+const serviceAccount = require('./bf-werkzeug-tracker-firebase-adminsdk-fbsvc-32f7812506.json');
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+const db = admin.firestore();
+const app = express();
+const PORT = 8080;
+const qrDir = path.join(__dirname, 'qr-codes');
+
+if (!fs.existsSync(qrDir)) fs.mkdirSync(qrDir);
+
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/qr-codes', express.static(qrDir));
+app.use('/qr-codes-mitarbeiter',
+  express.static(path.join(__dirname, 'qr-codes-mitarbeiter'))
+);
+
+// QR-Code für ein Werkzeug generieren und als PNG speichern
+app.post('/api/generate-qr', async (req, res) => {
+  const { id, name } = req.body;
+  if (!id || !name) return res.status(400).json({ error: 'id und name erforderlich' });
+
+  const safeName = name.replace(/[^a-z0-9äöüß]/gi, '_');
+  const filePath = path.join(qrDir, `${safeName}_${id}.png`);
+
+  try {
+    await QRCode.toFile(filePath, id, { width: 400 });
+    res.json({ ok: true, file: `${safeName}_${id}.png` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+app.post('/api/add-mitarbeiter', async (req, res) => {
+  const { name } = req.body;
+
+  if (!name) {
+    return res.status(400).json({error:'Name fehlt'});
+  }
+
+  const snap = await db.collection('mitarbeiter')
+    .orderBy('mitarbeiterId', 'desc')
+    .limit(1)
+    .get();
+
+  let next = 1;
+
+  if (!snap.empty) {
+    const last = snap.docs[0].data().mitarbeiterId;
+    next = parseInt(last.split('-')[1], 10) + 1;
+  }
+
+  const mitarbeiterId = `MA-${String(next).padStart(3,'0')}`;
+
+  const safeNameEarly = name.replace(/[^a-z0-9äöüß]/gi, '_');
+  const fileEarly = `${safeNameEarly}_${mitarbeiterId}.png`;
+
+  await db.collection('mitarbeiter')
+    .doc(mitarbeiterId)
+    .set({
+      name,
+      mitarbeiterId,
+      qrFile: fileEarly
+    });
+
+  await QRCode.toFile(
+    path.join(__dirname, 'qr-codes-mitarbeiter', fileEarly),
+    mitarbeiterId,
+    {width:400}
+  );
+
+  res.json({
+    ok:true,
+    id:mitarbeiterId,
+    file:fileEarly
+  });
+
+});
+app.post('/api/delete-qr', async (req, res) => {
+  const { file } = req.body;
+
+  if (!file) {
+    return res.status(400).json({error:'Dateiname fehlt'});
+  }
+
+  const filePath = path.join(__dirname, 'qr-codes', file);
+
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
+
+  res.json({ok:true});
+});
+app.listen(PORT, () => console.log(`Server läuft auf Port ${PORT}`));
+
+
+// Mitarbeiter löschen
+app.post('/api/delete-mitarbeiter', async (req, res) => {
+  try {
+    const id = req.body.id;
+
+    if (!id) {
+      return res.json({ok:false, error:"Keine ID"});
+    }
+
+    const doc = await db.collection('mitarbeiter').doc(id).get();
+
+    if (!doc.exists) {
+      return res.json({ok:false, error:"Mitarbeiter nicht gefunden"});
+    }
+
+    const data = doc.data();
+
+    // QR Datei löschen
+    if (data.qrFile) {
+      const fs = require('fs');
+      const path = require('path');
+
+      const file = path.join(
+        __dirname,
+        'qr-codes-mitarbeiter',
+        data.qrFile
+      );
+
+      if (fs.existsSync(file)) {
+        fs.unlinkSync(file);
+      }
+    }
+
+    // Firestore löschen
+    await db.collection('mitarbeiter').doc(id).delete();
+
+
+    res.json({
+      ok:true,
+      message:"Mitarbeiter gelöscht"
+    });
+
+
+  } catch(e) {
+
+    console.error(e);
+
+    res.json({
+      ok:false,
+      error:e.message
+    });
+
+  }
+});
+

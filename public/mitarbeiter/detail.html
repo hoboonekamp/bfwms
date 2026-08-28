@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mitarbeiter Detail</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="../firebase-config.js"></script>
+
+<style>
+body {
+  font-family: sans-serif;
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 10px;
+}
+
+a.back {
+  display:inline-block;
+  margin-bottom:10px;
+  text-decoration:none;
+  color:#2563eb;
+}
+
+#qrImg {
+  max-width:250px;
+  display:block;
+  margin:14px auto;
+}
+
+.download-btn,
+.delete-btn {
+  display:block;
+  padding:12px 20px;
+  font-size:16px;
+  margin-top:10px;
+  width:100%;
+  text-align:center;
+  text-decoration:none;
+  box-sizing:border-box;
+  border-radius:6px;
+  color:white;
+  border:none;
+}
+
+.download-btn {
+  background:#16a34a;
+}
+
+.delete-btn {
+  background:#dc2626;
+}
+
+.card {
+  border:1px solid #ccc;
+  border-radius:8px;
+  padding:10px;
+  margin:8px 0;
+}
+
+#status {
+  font-weight:bold;
+  margin:12px 0;
+}
+</style>
+
+</head>
+
+<body>
+
+<a class="back" href="liste.html">← Zurück</a>
+
+<h2 id="titel">Lade...</h2>
+
+<img id="qrImg" style="display:none;">
+
+<a id="downloadBtn" class="download-btn" style="display:none;" download>
+⬇️ QR herunterladen
+</a>
+
+<button id="deleteBtn" class="delete-btn" style="display:none;">
+🗑 Mitarbeiter löschen
+</button>
+
+<h3>Offene Aufträge</h3>
+
+<div id="status"></div>
+<div id="auftragsListe"></div>
+
+
+<script>
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const params = new URLSearchParams(window.location.search);
+const mitarbeiterId = params.get('id');
+
+
+async function lade() {
+
+  if (!mitarbeiterId) {
+    document.getElementById('status').textContent =
+      'Keine ID angegeben';
+    return;
+  }
+
+
+  const doc = await db.collection('mitarbeiter')
+    .doc(mitarbeiterId)
+    .get();
+
+
+  if (!doc.exists) {
+    document.getElementById('status').textContent =
+      'Mitarbeiter nicht gefunden';
+    return;
+  }
+
+
+  const m = doc.data();
+
+
+  document.getElementById('titel').textContent =
+    `${m.name} (${m.mitarbeiterId})`;
+
+
+  // QR anzeigen
+  if (m.qrFile) {
+
+    const img = document.getElementById('qrImg');
+
+    img.src = `/qr-codes-mitarbeiter/${m.qrFile}`;
+    img.style.display = 'block';
+
+
+    const dl = document.getElementById('downloadBtn');
+
+    dl.href = `/qr-codes-mitarbeiter/${m.qrFile}`;
+    dl.download = m.qrFile;
+    dl.style.display = 'block';
+
+  }
+
+
+  // Löschen Button
+  const deleteBtn = document.getElementById('deleteBtn');
+
+  deleteBtn.style.display = 'block';
+
+
+  deleteBtn.onclick = async () => {
+
+    if (!confirm(`${m.name} wirklich löschen?`)) {
+      return;
+    }
+
+
+    const res = await fetch('/api/delete-mitarbeiter', {
+
+      method:'POST',
+
+      headers:{
+        'Content-Type':'application/json'
+      },
+
+      body:JSON.stringify({
+        id:mitarbeiterId
+      })
+
+    });
+
+
+    const data = await res.json();
+
+
+    if(data.ok){
+
+      alert('✓ Mitarbeiter gelöscht');
+
+      window.location.href='liste.html';
+
+    } else {
+
+      alert('Fehler: ' + data.error);
+
+    }
+
+  };
+
+
+
+  // offene Aufträge
+  const aufSnap =
+    await db.collection('auftraege')
+    .where('status','==','offen')
+    .get();
+
+
+  const listeEl =
+    document.getElementById('auftragsListe');
+
+  const statusEl =
+    document.getElementById('status');
+
+
+  let treffer=[];
+
+
+  aufSnap.forEach(aDoc=>{
+
+    const a=aDoc.data();
+
+    if((a.mitarbeiter || [])
+      .some(x=>x.mitarbeiterId===mitarbeiterId)){
+
+      treffer.push(a);
+
+    }
+
+  });
+
+
+  if(treffer.length===0){
+
+    statusEl.textContent =
+      'Aktuell keinem offenen Auftrag zugewiesen';
+
+    return;
+
+  }
+
+
+  statusEl.textContent='';
+
+
+  treffer.forEach(a=>{
+
+    const div=document.createElement('div');
+
+    div.className='card';
+
+    div.textContent =
+      `${a.auftragId} — ${a.auftraggeber} (${a.ort}, ${a.datum})`;
+
+    listeEl.appendChild(div);
+
+  });
+
+
+}
+
+
+lade();
+
+</script>
+
+</body>
+</html>

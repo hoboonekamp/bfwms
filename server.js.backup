@@ -1,0 +1,32 @@
+const express = require('express');
+const QRCode = require('qrcode');
+const path = require('path');
+const fs = require('fs');
+
+const app = express();
+const PORT = 8080;
+const qrDir = path.join(__dirname, 'qr-codes');
+
+if (!fs.existsSync(qrDir)) fs.mkdirSync(qrDir);
+
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/qr-codes', express.static(qrDir));
+
+// QR-Code für ein Werkzeug generieren und als PNG speichern
+app.post('/api/generate-qr', async (req, res) => {
+  const { id, name } = req.body;
+  if (!id || !name) return res.status(400).json({ error: 'id und name erforderlich' });
+
+  const safeName = name.replace(/[^a-z0-9äöüß]/gi, '_');
+  const filePath = path.join(qrDir, `${safeName}_${id}.png`);
+
+  try {
+    await QRCode.toFile(filePath, id, { width: 400 });
+    res.json({ ok: true, file: `${safeName}_${id}.png` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.listen(PORT, () => console.log(`Server läuft auf Port ${PORT}`));

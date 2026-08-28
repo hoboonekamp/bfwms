@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Offene Aufträge</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="../firebase-config.js"></script>
+<style>
+  body { font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 10px; }
+  .card { border: 1px solid #ccc; border-radius: 8px; padding: 12px; margin: 10px 0; }
+  .card h3 { margin: 0 0 6px 0; }
+  .card p { margin: 3px 0; font-size: 14px; color: #333; }
+  .card ul { margin: 6px 0 0 0; padding-left: 18px; font-size: 14px; }
+  #status { font-weight: bold; margin: 10px 0; }
+</style>
+</head>
+<body>
+
+<a href="../index.html" style="display:inline-block; margin-bottom:10px; text-decoration:none; color:#2563eb;">← Zurück zum Menü</a>
+<h2>Offene Aufträge</h2>
+<div id="status">Lade...</div>
+<div id="liste"></div>
+
+<script>
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+async function ladeAuftraege() {
+  const snap = await db.collection('auftraege').where('status', '==', 'offen').get();
+  const statusEl = document.getElementById('status');
+  const listeEl = document.getElementById('liste');
+
+  if (snap.empty) {
+    statusEl.textContent = 'Keine offenen Aufträge.';
+    return;
+  }
+  statusEl.textContent = '';
+
+  const auftraege = [];
+  snap.forEach(doc => auftraege.push(doc.data()));
+  auftraege.sort((a, b) => a.auftragId.localeCompare(b.auftragId));
+
+  auftraege.forEach(a => {
+    const div = document.createElement('div');
+    div.className = 'card';
+    const mitarbeiterNamen = (a.mitarbeiter || []).map(m => m.name).join(', ') || '–';
+    const werkzeugNamen = (a.werkzeuge || []).map(w => w.name);
+    div.innerHTML = `
+      <h3>${a.auftragId} — ${a.auftraggeber}</h3>
+      <p>📅 ${a.datum} &nbsp;|&nbsp; 📍 ${a.ort}</p>
+      <p>👷 ${mitarbeiterNamen}</p>
+      <p>🔧 Werkzeuge (${werkzeugNamen.length}):</p>
+      <ul>${werkzeugNamen.length ? werkzeugNamen.map(w => `<li>${w}</li>`).join('') : '<li>–</li>'}</ul>
+    `;
+    listeEl.appendChild(div);
+  });
+}
+ladeAuftraege();
+</script>
+</body>
+</html>

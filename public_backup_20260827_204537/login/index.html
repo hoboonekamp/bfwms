@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Mitarbeiter Login</title>
+
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="../firebase-config.js"></script>
+
+<style>
+body {
+ font-family:sans-serif;
+ max-width:500px;
+ margin:auto;
+ padding:20px;
+}
+
+h2 {
+ text-align:center;
+}
+
+#reader {
+ width:100%;
+}
+
+#status {
+ margin-top:15px;
+ font-weight:bold;
+}
+</style>
+
+</head>
+
+<body>
+
+<h2>👷 Mitarbeiter Login</h2>
+
+<div id="reader"></div>
+
+<div id="status">
+Bitte Mitarbeiter QR scannen
+</div>
+
+
+<script>
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const status =
+document.getElementById("status");
+
+
+async function onScan(code){
+
+ status.textContent =
+ "Suche Mitarbeiter...";
+
+
+ const doc =
+ await db.collection("mitarbeiter")
+ .doc(code)
+ .get();
+
+
+ if(!doc.exists){
+
+   status.textContent =
+   "❌ Unbekannter Mitarbeiter";
+
+   return;
+ }
+
+
+ const m = doc.data();
+
+
+ localStorage.setItem(
+   "aktuellerMitarbeiter",
+   JSON.stringify({
+     id: code,
+     name: m.name
+   })
+ );
+
+
+ status.textContent =
+ "✅ Eingeloggt: " + m.name;
+
+
+ setTimeout(()=>{
+
+   window.location.href =
+   "../mitarbeiter/scan.html";
+
+ },1000);
+
+
+}
+
+
+const scanner =
+new Html5Qrcode("reader");
+
+
+scanner.start(
+ {facingMode:"environment"},
+ {
+  fps:10,
+  qrbox:250
+ },
+ onScan
+);
+
+</script>
+
+</body>
+</html>
+

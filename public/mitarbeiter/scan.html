@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Werkzeug Scanner</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="../firebase-config.js"></script>
+
+<style>
+
+body {
+  font-family:sans-serif;
+  max-width:500px;
+  margin:auto;
+  padding:10px;
+}
+
+#reader {
+  width:100%;
+}
+
+.card {
+ border:1px solid #ccc;
+ border-radius:8px;
+ padding:10px;
+ margin:8px 0;
+}
+
+button {
+ padding:12px;
+ width:100%;
+ margin-top:10px;
+ font-size:16px;
+}
+
+#status {
+ font-weight:bold;
+ margin:10px 0;
+}
+
+.user {
+ background:#eee;
+ padding:10px;
+ border-radius:8px;
+ margin-bottom:10px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+
+<div class="user" id="userBox">
+Lade Benutzer...
+</div>
+
+
+<h2 id="title">
+🔧 Werkzeug scannen
+</h2>
+
+
+<div id="status">
+Bereit
+</div>
+
+
+<div id="reader"></div>
+
+
+<h3>Gescannt:</h3>
+
+<ul id="werkzeugListe"></ul>
+
+
+<button id="logoutBtn">
+🚪 Abmelden
+</button>
+
+
+
+<script>
+
+
+firebase.initializeApp(firebaseConfig);
+
+const db = firebase.firestore();
+
+
+let aktuellerMitarbeiter = null;
+
+let gescannt = [];
+
+
+
+const statusEl =
+document.getElementById("status");
+
+
+const userBox =
+document.getElementById("userBox");
+
+
+
+//
+// Login laden
+//
+
+function ladeLogin(){
+
+ const data =
+ localStorage.getItem(
+ "aktuellerMitarbeiter"
+ );
+
+
+ if(!data){
+
+   alert(
+   "Kein Mitarbeiter eingeloggt"
+   );
+
+   window.location.href =
+   "../login/index.html";
+
+   return;
+
+ }
+
+
+ aktuellerMitarbeiter =
+ JSON.parse(data);
+
+
+ userBox.textContent =
+ "👷 Eingeloggt: "
+ + aktuellerMitarbeiter.name;
+
+
+}
+
+
+
+ladeLogin();
+
+
+
+
+
+function setStatus(text){
+
+ statusEl.textContent=text;
+
+}
+
+
+
+
+//
+// Werkzeug QR
+//
+
+async function onScan(code){
+
+
+ code=code.trim();
+
+
+ const doc =
+ await db.collection("werkzeuge")
+ .doc(code)
+ .get();
+
+
+
+ if(!doc.exists){
+
+   setStatus(
+   "❌ Werkzeug unbekannt: "
+   +code
+   );
+
+   return;
+
+ }
+
+
+
+ const w =
+ doc.data();
+
+
+
+ if(
+ gescannt.some(
+ x=>x.werkzeugId===code
+ )
+ ){
+
+   setStatus(
+   "⚠ Schon gescannt: "
+   +w.name
+   );
+
+   return;
+
+ }
+
+
+
+ const eintrag={
+
+   werkzeugId:code,
+
+   name:w.name,
+
+   mitarbeiterId:
+   aktuellerMitarbeiter.id,
+
+   mitarbeiterName:
+   aktuellerMitarbeiter.name,
+
+   zeit:
+   new Date().toISOString()
+
+ };
+
+
+
+ gescannt.push(eintrag);
+
+
+
+ await db.collection(
+ "historie"
+ )
+ .add(eintrag);
+
+
+
+ setStatus(
+ "✅ "
+ +w.name
+ );
+
+
+
+ render();
+
+
+}
+
+
+
+
+function render(){
+
+ const ul =
+ document.getElementById(
+ "werkzeugListe"
+ );
+
+
+ ul.innerHTML="";
+
+
+ gescannt.forEach(w=>{
+
+
+ const li =
+ document.createElement("li");
+
+
+ li.textContent =
+ w.name;
+
+
+ ul.appendChild(li);
+
+
+ });
+
+
+}
+
+
+
+
+
+//
+// Logout
+//
+
+document.getElementById(
+"logoutBtn"
+).onclick=function(){
+
+
+ localStorage.removeItem(
+ "aktuellerMitarbeiter"
+ );
+
+
+ window.location.href =
+ "../login/index.html";
+
+
+};
+
+
+
+
+
+//
+// Scanner starten
+//
+
+const scanner =
+new Html5Qrcode(
+"reader"
+);
+
+
+scanner.start(
+
+ {facingMode:"environment"},
+
+ {
+  fps:10,
+  qrbox:250
+ },
+
+ onScan,
+
+ ()=>{}
+
+);
+
+
+
+</script>
+
+
+</body>
+</html>

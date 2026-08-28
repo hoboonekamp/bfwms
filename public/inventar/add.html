@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Objekt hinzufügen</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="../firebase-config.js"></script>
+<style>
+  body { font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 10px; }
+  a.back { display:inline-block; margin-bottom:10px; text-decoration:none; color:#2563eb; }
+  input[type=text] { width: 100%; padding: 8px; font-size: 16px; box-sizing: border-box; margin-top: 10px; }
+  button { padding: 12px 20px; font-size: 16px; margin-top: 14px; width: 100%; }
+  #status { font-weight: bold; margin: 12px 0; }
+  #qrBox { text-align: center; margin-top: 14px; }
+</style>
+</head>
+<body>
+<a class="back" href="index.html">← Zurück</a>
+<h2>Objekt hinzufügen</h2>
+
+<label>Name</label>
+<input type="text" id="name" placeholder="z.B. Bohrmaschine">
+
+<button id="speichernBtn">Speichern</button>
+<div id="status"></div>
+<div id="qrBox"></div>
+
+<script>
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+async function getNextId() {
+  const snap = await db.collection('werkzeuge').orderBy('werkzeugId', 'desc').limit(1).get();
+  if (snap.empty) return 1;
+  const lastCode = snap.docs[0].data().werkzeugId;
+  return parseInt(lastCode.split('-')[1], 10) + 1;
+}
+
+document.getElementById('speichernBtn').onclick = async () => {
+  const name = document.getElementById('name').value.trim();
+  const statusEl = document.getElementById('status');
+  const qrBox = document.getElementById('qrBox');
+  if (!name) { statusEl.textContent = '✗ Bitte Name eingeben'; return; }
+
+  statusEl.textContent = 'Speichere...';
+  const nextNum = await getNextId();
+  const werkzeugId = `WZ-${String(nextNum).padStart(3, '0')}`;
+
+  await db.collection('werkzeuge').doc(werkzeugId).set({ name, werkzeugId });
+
+  // QR-Code serverseitig erzeugen und als PNG speichern
+  const res = await fetch('/api/generate-qr', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: werkzeugId, name })
+  });
+  const result = await res.json();
+  if (result.ok) {
+    await db.collection('werkzeuge').doc(werkzeugId).update({ qrFile: result.file });
+  }
+
+  statusEl.textContent = `✓ "${name}" → ${werkzeugId} gespeichert (QR: ${result.file || 'Fehler'})`;
+  qrBox.innerHTML = '<canvas id="qrCanvas"></canvas>';
+  QRCode.toCanvas(document.getElementById('qrCanvas'), werkzeugId, { width: 250 });
+
+  document.getElementById('name').value = '';
+};
+</script>
+</body>
+</html>

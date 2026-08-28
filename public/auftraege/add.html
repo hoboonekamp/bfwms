@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neuer Auftrag</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="../firebase-config.js"></script>
+<style>
+  body { font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 10px; }
+  label { display: block; margin-top: 12px; font-weight: bold; }
+  input[type=text] { width: 100%; padding: 8px; font-size: 16px; box-sizing: border-box; }
+  .ma-card { border: 1px solid #ccc; border-radius: 8px; padding: 10px; margin: 6px 0; display: flex; align-items: center; gap: 8px; }
+  .ma-card input { width: 20px; height: 20px; }
+  #status { font-weight: bold; margin: 14px 0; min-height: 24px; }
+  button { padding: 12px 20px; font-size: 16px; margin-top: 16px; width: 100%; }
+</style>
+</head>
+<body>
+
+<h2>Neuer Auftrag</h2>
+<a href="../index.html" style="display:inline-block; margin-bottom:10px; text-decoration:none; color:#2563eb;">← Zurück zum Menü</a>
+
+<label>Auftraggeber</label>
+<input type="text" id="auftraggeber">
+
+<label>Datum</label>
+<input type="text" id="datum" placeholder="z.B. 26.08.2026">
+
+<label>Ort</label>
+<input type="text" id="ort">
+
+<label>Mitarbeiter</label>
+<div id="mitarbeiterListe">Lade...</div>
+
+<div id="status"></div>
+<button id="speichernBtn">Auftrag speichern</button>
+
+<script>
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const listeEl = document.getElementById('mitarbeiterListe');
+const statusEl = document.getElementById('status');
+
+async function ladeMitarbeiter() {
+  const snap = await db.collection('mitarbeiter').orderBy('mitarbeiterId').get();
+  listeEl.innerHTML = '';
+  if (snap.empty) {
+    listeEl.textContent = 'Keine Mitarbeiter in der Datenbank.';
+    return;
+  }
+  snap.forEach(doc => {
+    const m = doc.data();
+    const div = document.createElement('div');
+    div.className = 'ma-card';
+    div.innerHTML = `
+      <input type="checkbox" value="${m.mitarbeiterId}" data-name="${m.name}" id="cb-${m.mitarbeiterId}">
+      <label for="cb-${m.mitarbeiterId}" style="margin:0; font-weight:normal;">${m.name} (${m.mitarbeiterId})</label>
+    `;
+    listeEl.appendChild(div);
+  });
+}
+ladeMitarbeiter();
+
+async function getNextId() {
+  const snapshot = await db.collection('auftraege').orderBy('auftragId', 'desc').limit(1).get();
+  if (snapshot.empty) return 1;
+  const lastCode = snapshot.docs[0].data().auftragId;
+  const lastNum = parseInt(lastCode.split('-')[1], 10);
+  return lastNum + 1;
+}
+
+document.getElementById('speichernBtn').onclick = async () => {
+  const auftraggeber = document.getElementById('auftraggeber').value.trim();
+  const datum = document.getElementById('datum').value.trim();
+  const ort = document.getElementById('ort').value.trim();
+
+  if (!auftraggeber || !datum || !ort) {
+    statusEl.textContent = '✗ Bitte Auftraggeber, Datum und Ort ausfüllen';
+    return;
+  }
+
+  const checked = [...document.querySelectorAll('#mitarbeiterListe input[type=checkbox]:checked')];
+  const mitarbeiter = checked.map(cb => ({ mitarbeiterId: cb.value, name: cb.dataset.name }));
+
+  statusEl.textContent = 'Speichere...';
+
+  const nextNum = await getNextId();
+  const auftragId = `AUF-${String(nextNum).padStart(3, '0')}`;
+
+  await db.collection('auftraege').doc(auftragId).set({
+    auftragId, auftraggeber, datum, ort,
+    mitarbeiter,
+    status: 'offen',
+    werkzeuge: []
+  });
+
+  statusEl.textContent = `✓ ${auftragId} gespeichert`;
+  document.getElementById('auftraggeber').value = '';
+  document.getElementById('datum').value = '';
+  document.getElementById('ort').value = '';
+  checked.forEach(cb => cb.checked = false);
+};
+</script>
+</body>
+</html>

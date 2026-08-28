@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mitarbeiter hinzufügen</title>
+
+<style>
+body {
+  font-family: sans-serif;
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+input {
+  width: 100%;
+  padding: 12px;
+  font-size: 16px;
+  box-sizing: border-box;
+  margin-top: 10px;
+}
+
+button {
+  width: 100%;
+  padding: 14px;
+  font-size: 16px;
+  margin-top: 15px;
+}
+
+a.back {
+  text-decoration: none;
+  color: #2563eb;
+}
+
+#status {
+  margin-top: 15px;
+  font-weight: bold;
+}
+
+#qr {
+  max-width: 250px;
+  display: block;
+  margin: 20px auto;
+}
+</style>
+
+</head>
+
+<body>
+
+<a class="back" href="index.html">← Zurück</a>
+
+<h2>👷 Mitarbeiter hinzufügen</h2>
+
+<label>Name</label>
+<input id="name" placeholder="z.B. Max Mustermann">
+
+<button onclick="speichern()">Speichern</button>
+
+<div id="status"></div>
+
+<img id="qr" style="display:none;">
+
+<script>
+
+async function speichern() {
+
+  const name = document.getElementById('name').value.trim();
+  const status = document.getElementById('status');
+  const qr = document.getElementById('qr');
+
+  if (!name) {
+    status.textContent = "✗ Bitte Namen eingeben";
+    return;
+  }
+
+  status.textContent = "Speichere...";
+
+  try {
+
+    const res = await fetch('/api/add-mitarbeiter', {
+      method: 'POST',
+      headers: {
+        'Content-Type':'application/json'
+      },
+      body: JSON.stringify({name})
+    });
+
+    const data = await res.json();
+
+    if (data.ok) {
+
+      status.textContent =
+        `✓ ${name} → ${data.id} gespeichert`;
+
+      qr.src = `/qr-codes-mitarbeiter/${data.file}`;
+      qr.style.display = 'block';
+
+      document.getElementById('name').value = '';
+
+    } else {
+      status.textContent = "✗ Fehler: " + (data.error || "unbekannt");
+    }
+
+  } catch(e) {
+    status.textContent = "✗ Verbindung fehlgeschlagen";
+    console.error(e);
+  }
+
+}
+
+</script>
+
+</body>
+</html>

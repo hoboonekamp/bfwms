@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Werkzeug finden</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="../firebase-config.js"></script>
+<style>
+  body { font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 10px; }
+  a.back { display:inline-block; margin-bottom:10px; text-decoration:none; color:#2563eb; }
+  input[type=text] { width: 100%; padding: 8px; font-size: 16px; box-sizing: border-box; margin-top: 10px; }
+  .card { border: 1px solid #ccc; border-radius: 8px; padding: 10px; margin: 8px 0; }
+  .card p { margin: 3px 0; font-size: 14px; }
+  #status { font-weight: bold; margin: 10px 0; }
+</style>
+</head>
+<body>
+<a class="back" href="index.html">← Zurück</a>
+<h2>Werkzeug finden</h2>
+
+<input type="text" id="suchfeld" placeholder="Suchbegriff eingeben...">
+<div id="status"></div>
+<div id="ergebnisse"></div>
+
+<script>
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+let alleWerkzeuge = [];
+let offeneAuftraege = [];
+
+async function ladeDaten() {
+  const wzSnap = await db.collection('werkzeuge').get();
+  alleWerkzeuge = wzSnap.docs.map(d => d.data());
+
+  const aufSnap = await db.collection('auftraege').where('status', '==', 'offen').get();
+  offeneAuftraege = aufSnap.docs.map(d => d.data());
+}
+
+function findeStandort(werkzeugId) {
+  for (const auftrag of offeneAuftraege) {
+    const eintrag = (auftrag.werkzeuge || []).find(w => w.werkzeugId === werkzeugId);
+    if (eintrag) {
+      const mitarbeiter = (auftrag.mitarbeiter || []).find(m => m.mitarbeiterId === eintrag.mitarbeiterId);
+      const mitarbeiterName = mitarbeiter ? mitarbeiter.name : eintrag.mitarbeiterId;
+      return `👷 ${mitarbeiterName} — 📋 ${auftrag.auftragId} (${auftrag.auftraggeber}, ${auftrag.ort})`;
+    }
+  }
+  return '📦 Im Lager (keinem offenen Auftrag zugeordnet)';
+}
+
+function suche() {
+  const begriff = document.getElementById('suchfeld').value.trim().toLowerCase();
+  const ergebnisseEl = document.getElementById('ergebnisse');
+  const statusEl = document.getElementById('status');
+  ergebnisseEl.innerHTML = '';
+
+  if (!begriff) { statusEl.textContent = ''; return; }
+
+  const treffer = alleWerkzeuge.filter(w => w.name.toLowerCase().includes(begriff));
+  statusEl.textContent = `${treffer.length} Treffer`;
+
+  treffer.forEach(w => {
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.innerHTML = `<p><b>${w.name}</b> (${w.werkzeugId})</p><p>${findeStandort(w.werkzeugId)}</p>`;
+    ergebnisseEl.appendChild(div);
+  });
+}
+
+document.getElementById('suchfeld').addEventListener('input', suche);
+ladeDaten();
+</script>
+</body>
+</html>
